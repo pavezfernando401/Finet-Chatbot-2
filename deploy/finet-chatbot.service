@@ -1,0 +1,26 @@
+# systemd: copy to /etc/systemd/system/finet-chatbot.service, adjust the
+# three lines marked CHANGE, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now finet-chatbot
+# See docs/despliegue-vps.md.
+
+[Unit]
+Description=finet-chatbot (asistente virtual de Finet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# CHANGE: the user that owns the checkout (not root).
+User=finet
+# CHANGE: where the repo is cloned. Nest reads the .env from here.
+WorkingDirectory=/opt/finet-chatbot
+# CHANGE: the output of `which node` for that user (Node 24).
+ExecStart=/usr/bin/node dist/main.js
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=5
+# Shutdown hooks need a moment to close cleanly.
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
