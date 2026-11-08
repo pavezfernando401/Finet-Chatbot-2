@@ -44,9 +44,11 @@ import {
   ticketFailedText,
   ticketFiledText,
 } from './handoff.js';
+import { RutAttempts } from './rut-attempts.js';
 import {
   anonymousContext,
   identifiedContext,
+  RUT_LIMIT_REACHED,
   RUT_NOT_VERIFIED,
   RUT_PLACEHOLDER,
   RUT_REQUEST,
@@ -101,6 +103,8 @@ export class MessagesService {
 
   /** In-flight work per conversation. See {@link serialise}. */
   private readonly chains = new Map<string, Promise<unknown>>();
+
+  private readonly rutAttempts = new RutAttempts();
 
   private readonly handoffReply: string;
   private readonly accountUnavailableReply: string;
@@ -172,6 +176,7 @@ export class MessagesService {
       ConversationStore.key(MessageChannel.Web, message.sessionId),
       message.content,
       message.accessToken,
+      message.clientIp,
     );
 
     return answer ?? { content: null, handedOff: true };
@@ -182,6 +187,7 @@ export class MessagesService {
     key: string,
     content: string,
     accessToken?: string,
+    clientIp?: string,
   ): Promise<Answer> {
     return this.serialise(key, async () => {
       const conversation = this.conversations.get(key);
@@ -203,6 +209,7 @@ export class MessagesService {
         conversation,
         content,
         accessToken,
+        clientIp,
       );
 
       // Written back only once there is an answer, so a failed engine call
@@ -226,6 +233,7 @@ export class MessagesService {
     conversation: Conversation,
     content: string,
     accessToken?: string,
+    clientIp?: string,
   ): Promise<Outcome> {
     const { identity } = conversation;
     const found = extractRut(content);
@@ -239,11 +247,22 @@ export class MessagesService {
     const turn = found
       ? content.replace(found.match, RUT_PLACEHOLDER)
       : content;
-    // No cap on how many RUTs a conversation tries: the site's public debt
-    // lookup (CU-39) has none either, only the rate limit per IP, and the
-    // widget's messages go through one of those.
     if (found && identity.status !== 'identified') {
-      const lookup = await this.customers.lookup(found.rut);
+      // Per address when the site sends one; a channel that has none counts
+      // per conversation.
+      if (!this.rutAttempts.allow(clientIp ?? key, found.rut)) {
+        this.logger.warn(`${key} · RUT check: limit reached`);
+        return this.answer(
+          key,
+          conversation,
+          turn,
+          { status: 'anonymous' },
+          RUT_LIMIT_REACHED,
+          accessToken,
+        );
+      }
+
+      const lookup = await this.customers.lookup(found.rut, accessToken);
       this.logger.log(`${key} · RUT check: ${lookup.status}`);
 
       if (lookup.status === 'found') {

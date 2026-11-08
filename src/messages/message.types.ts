@@ -22,6 +22,7 @@ export interface WebMessage {
   sessionId: string;
   content: string;
   accessToken?: string;
+  clientIp?: string;
 }
 
 /**

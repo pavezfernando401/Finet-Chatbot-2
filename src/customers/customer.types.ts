@@ -5,7 +5,8 @@
  */
 export interface Customer {
   name: string;
-  plans: CustomerPlan[];
+  /** `null` without the portal session of this same customer. */
+  plans: CustomerPlan[] | null;
 }
 
 export interface CustomerPlan {

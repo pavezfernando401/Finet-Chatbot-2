@@ -1,4 +1,5 @@
 import {
+  IsIP,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -30,4 +31,9 @@ export class CreateWebMessageDto {
   @IsNotEmpty()
   @MaxLength(4096)
   accessToken?: string;
+
+  /** The visitor's address, which limits how many RUTs they can try. */
+  @IsOptional()
+  @IsIP()
+  clientIp?: string;
 }

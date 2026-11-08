@@ -21,6 +21,7 @@ export class WebMessagesController {
       sessionId: dto.sessionId,
       content: dto.content,
       accessToken: dto.accessToken,
+      clientIp: dto.clientIp,
     });
   }
 }

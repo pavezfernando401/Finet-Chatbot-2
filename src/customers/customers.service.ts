@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { optionalSetting } from '../config/env.js';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { optionalSetting } from "../config/env.js";
 import type {
   AccountLookup,
   CreatedSupportRequest,
@@ -11,7 +11,7 @@ import type {
   SupportCategory,
   SupportOutcome,
   SupportRequest,
-} from './customer.types.js';
+} from "./customer.types.js";
 
 /** A RUT check sits in front of the customer's answer, so it stays short. */
 const TIMEOUT_MS = 5_000;
@@ -53,12 +53,12 @@ interface SupportResponse {
 
 /** A string field from the response, or `''` when it is anything else. */
 function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+  return typeof value === "string" ? value : "";
 }
 
 /** A number field from the response, or `null` when it is anything else. */
 function count(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -73,34 +73,37 @@ export class CustomersService {
   private readonly apiKey?: string;
 
   constructor(config: ConfigService) {
-    this.baseUrl = optionalSetting(config, 'CLIENTES_API_URL')?.replace(
+    this.baseUrl = optionalSetting(config, "CLIENTES_API_URL")?.replace(
       /\/+$/,
-      '',
+      "",
     );
-    this.apiKey = optionalSetting(config, 'CLIENTES_API_KEY');
+    this.apiKey = optionalSetting(config, "CLIENTES_API_KEY");
 
     // Not fatal: without the records the bot still answers, in general mode,
     // which is what CU-63 asks for when the system does not respond.
     if (!this.baseUrl || !this.apiKey) {
       this.logger.warn(
-        'CLIENTES_API_URL or CLIENTES_API_KEY is not set: no RUT can be verified, every conversation stays in general mode',
+        "CLIENTES_API_URL or CLIENTES_API_KEY is not set: no RUT can be verified, every conversation stays in general mode",
       );
     }
   }
 
-  async lookup(rut: string): Promise<CustomerLookup> {
-    if (!this.baseUrl || !this.apiKey) return { status: 'unavailable' };
+  async lookup(rut: string, accessToken?: string): Promise<CustomerLookup> {
+    if (!this.baseUrl || !this.apiKey) return { status: "unavailable" };
 
     try {
       const res = await fetch(
         `${this.baseUrl}/asistente/clientes/identificar`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Api-Key': this.apiKey,
+            "Content-Type": "application/json",
+            "X-Api-Key": this.apiKey,
           },
-          body: JSON.stringify({ rut }),
+          body: JSON.stringify({
+            rut,
+            ...(accessToken ? { access_token: accessToken } : {}),
+          }),
           signal: AbortSignal.timeout(TIMEOUT_MS),
         },
       );
@@ -109,32 +112,33 @@ export class CustomersService {
       }
 
       const body = (await res.json()) as IdentifyResponse;
-      if (body.encontrado !== true) return { status: 'not_found' };
+      if (body.encontrado !== true) return { status: "not_found" };
 
       const name = body.cliente?.nombre_completo;
-      if (typeof name !== 'string' || !name.trim()) {
-        throw new Error('finet-clientes found the customer but sent no name');
+      if (typeof name !== "string" || !name.trim()) {
+        throw new Error("finet-clientes found the customer but sent no name");
       }
 
       return {
-        status: 'found',
+        status: "found",
         customer: {
           name: name.trim(),
-          plans: (body.cliente?.planes ?? []).map((plan): CustomerPlan => ({
-            name: text(plan.nombre_comercial),
-            type: text(plan.tipo_plan),
-            speedMbps:
-              typeof plan.velocidad_mbps === 'number'
-                ? plan.velocidad_mbps
-                : null,
-            contractStatus: text(plan.estado_contrato),
-          })),
+          plans:
+            body.cliente?.planes?.map((plan): CustomerPlan => ({
+              name: text(plan.nombre_comercial),
+              type: text(plan.tipo_plan),
+              speedMbps:
+                typeof plan.velocidad_mbps === "number"
+                  ? plan.velocidad_mbps
+                  : null,
+              contractStatus: text(plan.estado_contrato),
+            })) ?? null,
         },
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.error(`RUT check failed: ${reason}`);
-      return { status: 'unavailable' };
+      return { status: "unavailable" };
     }
   }
 
@@ -145,13 +149,13 @@ export class CustomersService {
    * lookup leaves from this one address.
    */
   async account(rut: string): Promise<AccountLookup> {
-    if (!this.baseUrl || !this.apiKey) return { status: 'unavailable' };
+    if (!this.baseUrl || !this.apiKey) return { status: "unavailable" };
 
     try {
       const res = await fetch(
         `${this.baseUrl}/deuda-publica/rut?rut=${encodeURIComponent(rut)}`,
         {
-          headers: { 'X-Api-Key': this.apiKey },
+          headers: { "X-Api-Key": this.apiKey },
           signal: AbortSignal.timeout(TIMEOUT_MS),
         },
       );
@@ -160,19 +164,19 @@ export class CustomersService {
       }
 
       const body = (await res.json()) as PublicDebtResponse;
-      if (body.encontrado !== true) return { status: 'not_found' };
+      if (body.encontrado !== true) return { status: "not_found" };
       // CU-41, exception 1: the customer exists but their invoices could not be read.
       if (body.detalle_disponible === false) {
-        throw new Error('finet-clientes could not read the invoices');
+        throw new Error("finet-clientes could not read the invoices");
       }
 
       const balance = count(body.saldo_total);
       if (balance === null) {
-        throw new Error('finet-clientes sent no balance');
+        throw new Error("finet-clientes sent no balance");
       }
 
       return {
-        status: 'found',
+        status: "found",
         account: {
           balance,
           invoices: (body.facturas ?? []).map((invoice): Invoice => ({
@@ -189,7 +193,7 @@ export class CustomersService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.error(`Account lookup failed: ${reason}`);
-      return { status: 'unavailable' };
+      return { status: "unavailable" };
     }
   }
 
@@ -209,21 +213,21 @@ export class CustomersService {
       const res = await fetch(
         `${this.baseUrl}/asistente/clientes/soporte/categorias`,
         {
-          headers: { 'X-API-Key': this.apiKey },
+          headers: { "X-API-Key": this.apiKey },
           signal: this.signal(deadline),
         },
       );
       if (!res.ok) throw new Error(`finet-clientes answered ${res.status}`);
       const body = (await res.json()) as unknown;
-      if (!Array.isArray(body)) throw new Error('invalid support categories');
+      if (!Array.isArray(body)) throw new Error("invalid support categories");
       const categories = body.filter(
         (category): category is SupportCategory =>
-          typeof category === 'object' &&
+          typeof category === "object" &&
           category !== null &&
-          typeof (category as SupportCategory).id_categoria === 'number' &&
-          typeof (category as SupportCategory).nombre === 'string',
+          typeof (category as SupportCategory).id_categoria === "number" &&
+          typeof (category as SupportCategory).nombre === "string",
       );
-      if (!categories.length) throw new Error('no support categories');
+      if (!categories.length) throw new Error("no support categories");
       return categories;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -241,13 +245,13 @@ export class CustomersService {
     request: SupportRequest,
     deadline?: AbortSignal,
   ): Promise<SupportOutcome> {
-    if (!this.baseUrl || !this.apiKey) return { status: 'unavailable' };
+    if (!this.baseUrl || !this.apiKey) return { status: "unavailable" };
     try {
       const res = await fetch(`${this.baseUrl}/asistente/clientes/soporte`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey,
+          "Content-Type": "application/json",
+          "X-API-Key": this.apiKey,
         },
         body: JSON.stringify({
           rut: request.rut,
@@ -259,19 +263,19 @@ export class CustomersService {
         signal: this.signal(deadline),
       });
       if (res.status === 401) {
-        this.logger.warn('Support request rejected: portal session not valid');
-        return { status: 'unauthorized' };
+        this.logger.warn("Support request rejected: portal session not valid");
+        return { status: "unauthorized" };
       }
       if (!res.ok) throw new Error(`finet-clientes answered ${res.status}`);
       const body = (await res.json()) as SupportResponse;
       if (
-        typeof body.id_ticket !== 'number' ||
-        typeof body.codigo_seguimiento !== 'string'
+        typeof body.id_ticket !== "number" ||
+        typeof body.codigo_seguimiento !== "string"
       ) {
-        throw new Error('invalid support response');
+        throw new Error("invalid support response");
       }
       return {
-        status: 'created',
+        status: "created",
         ticket: {
           id_ticket: body.id_ticket,
           codigo_seguimiento: body.codigo_seguimiento,
@@ -280,7 +284,7 @@ export class CustomersService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.logger.error(`Support request failed: ${reason}`);
-      return { status: 'unavailable' };
+      return { status: "unavailable" };
     }
   }
 
@@ -306,10 +310,10 @@ export class CustomersService {
       const res = await fetch(
         `${this.baseUrl}/asistente/clientes/escalamientos`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': this.apiKey,
+            "Content-Type": "application/json",
+            "X-API-Key": this.apiKey,
           },
           body: JSON.stringify({
             rut: escalation.rut,
@@ -327,10 +331,10 @@ export class CustomersService {
       if (!res.ok) throw new Error(`finet-clientes answered ${res.status}`);
       const body = (await res.json()) as SupportResponse;
       if (
-        typeof body.id_ticket !== 'number' ||
-        typeof body.codigo_seguimiento !== 'string'
+        typeof body.id_ticket !== "number" ||
+        typeof body.codigo_seguimiento !== "string"
       ) {
-        throw new Error('invalid escalation response');
+        throw new Error("invalid escalation response");
       }
       return {
         id_ticket: body.id_ticket,
