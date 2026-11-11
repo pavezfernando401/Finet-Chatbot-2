@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { Customer } from '../customers/customer.types.js';
+import type { CompanyId } from '../knowledge/companies.js';
 
 /** Turns kept per conversation, the system prompt aside. */
 const MAX_TURNS = 20;
@@ -35,6 +36,8 @@ export interface Conversation {
   identity: Identity;
   /** Sent to a person: the bot no longer answers, nor keeps what it is sent. */
   handedOff: boolean;
+  /** The company whose site the conversation started on. */
+  companyId?: CompanyId;
 }
 
 interface Entry {

@@ -37,6 +37,27 @@ describe('CatalogService', () => {
     vi.useRealTimers();
   });
 
+  it("asks only for the plans of the conversation's company", async () => {
+    await configured().plans(2);
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe('http://clientes.test/api/landing/planes?id_empresa=2');
+  });
+
+  it('keeps each company catalog apart', async () => {
+    const catalog = configured();
+    fetchMock
+      .mockResolvedValueOnce(respond(200, [fibra600]))
+      .mockResolvedValueOnce(respond(200, [{ ...fibra600, nombre_comercial: 'Cable 300' }]));
+
+    const finet = await catalog.plans(1);
+    const cable = await catalog.plans(2);
+
+    expect(finet?.[0]?.name).toBe('Fibra 600');
+    expect(cable?.[0]?.name).toBe('Cable 300');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('reads the public catalog and maps each plan', async () => {
     await expect(configured().plans()).resolves.toEqual([
       {

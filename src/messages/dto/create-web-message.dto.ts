@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsIP,
   IsNotEmpty,
   IsOptional,
@@ -6,6 +7,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import type { CompanyId } from '../../knowledge/companies.js';
 
 /**
  * Body accepted by `POST /web/messages`: one visitor turn from the site's
@@ -36,4 +38,9 @@ export class CreateWebMessageDto {
   @IsOptional()
   @IsIP()
   clientIp?: string;
+
+  /** The company whose site the visitor is on: 1 Finet, 2 Cable Mágico. */
+  @IsOptional()
+  @IsIn([1, 2])
+  companyId?: CompanyId;
 }

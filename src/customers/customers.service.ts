@@ -12,6 +12,7 @@ import type {
   SupportOutcome,
   SupportRequest,
 } from "./customer.types.js";
+import { isCompanyId } from "../knowledge/companies.js";
 
 /** A RUT check sits in front of the customer's answer, so it stays short. */
 const TIMEOUT_MS = 5_000;
@@ -21,6 +22,7 @@ interface IdentifyResponse {
   encontrado?: boolean;
   cliente?: {
     nombre_completo?: unknown;
+    id_empresa?: unknown;
     planes?: {
       nombre_comercial?: unknown;
       tipo_plan?: unknown;
@@ -119,10 +121,12 @@ export class CustomersService {
         throw new Error("finet-clientes found the customer but sent no name");
       }
 
+      const companyId = body.cliente?.id_empresa;
       return {
         status: "found",
         customer: {
           name: name.trim(),
+          ...(isCompanyId(companyId) ? { companyId } : {}),
           plans:
             body.cliente?.planes?.map((plan): CustomerPlan => ({
               name: text(plan.nombre_comercial),
