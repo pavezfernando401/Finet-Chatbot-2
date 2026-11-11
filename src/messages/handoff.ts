@@ -22,7 +22,7 @@ export const handoffTool: ChatCompletionFunctionTool = {
   function: {
     name: HANDOFF_TOOL,
     description:
-      'Deriva al cliente con una persona del equipo de Finet. Úsala cuando el ' +
+      'Deriva al cliente con una persona del equipo. Úsala cuando el ' +
       'cliente pide hablar con una persona, un agente o un ejecutivo, o cuando ' +
       'acepta que lo derives. Si solo no sabes algo, primero ofrece derivarlo y ' +
       'espera su respuesta. Después de usarla ya no podrás responder en esta ' +

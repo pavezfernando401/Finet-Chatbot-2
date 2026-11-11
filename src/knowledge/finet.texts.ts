@@ -1,4 +1,5 @@
 import type { CatalogPlan } from './catalog.service.js';
+import { COMPANIES, type Company } from './companies.js';
 
 /**
  * What the engine knows about Finet for general questions, so it answers
@@ -44,19 +45,9 @@ function catalogSection(plans: CatalogPlan[] | null, site: string): string {
   ].join('\n');
 }
 
-/**
- * Finet's facts and current catalog, for every turn the engine answers.
- * `site` is the public site's address, without a trailing slash.
- */
-export function finetContext(options: {
-  plans: CatalogPlan[] | null;
-  site: string;
-  whatsapp: string;
-}): string {
-  const { plans, site, whatsapp } = options;
+/** The facts only Finet published (its help page and finet.cl). */
+function finetFacts(site: string, whatsapp: string): string[] {
   return [
-    'Información de Finet. Úsala para las consultas generales y no inventes ' +
-      'nada que no esté aquí.',
     '- Finet (Fibernet Limitada) es un proveedor de Internet por fibra óptica ' +
       'de la Región Metropolitana. Su sitio es ' +
       `${site} y su WhatsApp, ${whatsapp}.`,
@@ -73,6 +64,49 @@ export function finetContext(options: {
       'técnico instala la fibra óptica y el router Wi-Fi y deja todo ' +
       'configurado.',
     '- Todos los planes de Internet tienen datos ilimitados.',
+  ];
+}
+
+/**
+ * The facts Cable Mágico gave (11-11): name, coverage, WhatsApp and hours.
+ * Installation times and the like it did not give, so the engine sends those
+ * questions to its WhatsApp instead of borrowing Finet's.
+ */
+function cableMagicoFacts(company: Company, site: string, whatsapp: string): string[] {
+  return [
+    `- ${company.name} (${company.legalName}) es un proveedor de Internet de ` +
+      `${company.region}. Su sitio es ${site} y su WhatsApp, ${whatsapp}` +
+      (company.hours ? `, que atiende ${company.hours}.` : '.'),
+    `- Cobertura: ${company.coverage}. En otras comunas no hay servicio: no lo ` +
+      'ofrezcas, pero el cliente puede consultar por WhatsApp. No puedes ' +
+      'confirmar si llega a una dirección exacta: el cliente puede consultarla ' +
+      'por WhatsApp.',
+    '- Para contratar se necesita un RUT chileno vigente y la dirección de ' +
+      `instalación. Se contrata desde ${site}/planes. Los plazos de contacto e ` +
+      'instalación no los tienes: dilos por WhatsApp, no los supongas.',
+  ];
+}
+
+/**
+ * The company's facts and current catalog, for every turn the engine answers.
+ * `site` is the company's site, without a trailing slash.
+ */
+export function companyContext(options: {
+  company: Company;
+  plans: CatalogPlan[] | null;
+  site: string;
+  whatsapp: string;
+}): string {
+  const { company, plans, site, whatsapp } = options;
+  const facts =
+    company.id === COMPANIES[1].id
+      ? finetFacts(site, whatsapp)
+      : cableMagicoFacts(company, site, whatsapp);
+  return [
+    `Eres el asistente de ${company.name}: responde siempre a su nombre.`,
+    `Información de ${company.name}. Úsala para las consultas generales y no ` +
+      'inventes nada que no esté aquí.',
+    ...facts,
     '- Ante problemas de conexión, primero recomienda reiniciar el router ' +
       '(desconectarlo 30 segundos y volver a conectarlo). Si sigue, soporte ' +
       'atiende por WhatsApp o con un ticket desde el Portal Cliente.',
@@ -91,4 +125,13 @@ export function finetContext(options: {
       'supongas: dilo, sugiere la página que corresponda u ofrece derivar con ' +
       'una persona del equipo.',
   ].join('\n');
+}
+
+/** Finet's context: what every turn got before there were two companies. */
+export function finetContext(options: {
+  plans: CatalogPlan[] | null;
+  site: string;
+  whatsapp: string;
+}): string {
+  return companyContext({ company: COMPANIES[1], ...options });
 }

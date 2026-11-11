@@ -19,8 +19,9 @@ import { OPENAI_CLIENT } from './openai.provider.js';
 
 // Plain text because the site's widget shows the answer as-is: Markdown would
 // reach the visitor as literal asterisks and pipes.
+// The company (Finet or Cable Mágico) comes in each turn's context.
 const DEFAULT_SYSTEM_PROMPT =
-  'Eres el asistente de Finet. Responde en el idioma del usuario, ' +
+  'Eres el asistente virtual de la empresa que indica el contexto. Responde en el idioma del usuario, ' +
   'de forma breve y concreta, en texto plano y sin Markdown. ' +
   'Si no sabes algo, dilo y ofrece derivar al cliente con una persona del equipo.';
 

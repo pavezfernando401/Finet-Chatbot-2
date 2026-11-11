@@ -1050,4 +1050,65 @@ describe("MessagesService", () => {
       expect(plans).not.toHaveBeenCalled();
     });
   });
+
+  /** The assistant works for Finet and for Cable Mágico (Emilio, 11-11). */
+  describe("each company's site", () => {
+    const CABLE_WHATSAPP = "+56 9 3303 1480";
+    const web = (content: string, companyId?: 1 | 2) =>
+      service.handleWeb({ sessionId: SESSION, content, companyId });
+
+    it("on Cable Mágico's site the RUT request speaks as Cable Mágico", async () => {
+      const { content } = await web("hola", 2);
+      expect(content).toContain("Cable Mágico");
+      expect(content).not.toContain("Finet");
+    });
+
+    it("the engine gets Cable Mágico's facts and its own catalog", async () => {
+      await web("hola", 2);
+      await web("¿dónde tienen servicio?", 2);
+
+      const { context } = lastCall();
+      expect(context).toContain("Eres el asistente de Cable Mágico");
+      expect(context).toContain("Algarrobo y El Quisco");
+      expect(context).not.toContain("La Pintana");
+      expect(plans).toHaveBeenLastCalledWith(2);
+    });
+
+    it("an identified customer's own company wins over the site's", async () => {
+      lookup.mockResolvedValue({
+        status: "found",
+        customer: { name: "Ana", plans: null, companyId: 2 },
+      });
+      await web("hola", 1);
+      await web(RUT, 1);
+
+      expect(lastCall().context).toContain("Eres el asistente de Cable Mágico");
+      expect(plans).toHaveBeenLastCalledWith(2);
+    });
+
+    it("handing off on Cable Mágico's site points to its WhatsApp", async () => {
+      complete.mockResolvedValue(handoff);
+      await web("hola", 2);
+      const { content } = await web("quiero hablar con alguien", 2);
+
+      expect(content).toContain(CABLE_WHATSAPP);
+      expect(content).not.toContain(WHATSAPP);
+    });
+
+    it("the conversation keeps its company between turns", async () => {
+      await web("hola", 2);
+      await web("¿y los planes?");
+
+      expect(lastCall().context).toContain("Eres el asistente de Cable Mágico");
+    });
+
+    it("Finet's site stays as it was", async () => {
+      await web("hola", 1);
+      await web("¿dónde tienen servicio?", 1);
+
+      expect(lastCall().context).toContain("Eres el asistente de Finet");
+      expect(lastCall().context).toContain("La Pintana");
+      expect(plans).toHaveBeenLastCalledWith(1);
+    });
+  });
 });
