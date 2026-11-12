@@ -1,5 +1,6 @@
 import type { ChatCompletionFunctionTool } from 'openai/resources/chat/completions';
 import type { SupportCategory } from '../customers/customer.types.js';
+import { COMPANIES, type Company } from '../knowledge/companies.js';
 
 /**
  * CU-66: the customer reports a failure and the bot files a support request
@@ -115,16 +116,24 @@ export const SUPPORT_DESCRIPTION_MISSING =
  * No portal session: the bot cannot file the request on the RUT alone. Over
  * WhatsApp there never is one, so the text says where to go.
  */
-export const SUPPORT_LOGIN_REQUIRED =
-  'Para registrar un reporte de falla necesito que inicies sesión en tu ' +
-  'cuenta en el sitio de Finet y me escribas desde el chat de ahí. Si ' +
-  'prefieres, puedo derivarte con una persona de nuestro equipo.';
+export function supportLoginRequired(company: Company): string {
+  return (
+    'Para registrar un reporte de falla necesito que inicies sesión en tu ' +
+    `cuenta en el sitio de ${company.name} y me escribas desde el chat de ahí. Si ` +
+    'prefieres, puedo derivarte con una persona de nuestro equipo.'
+  );
+}
+export const SUPPORT_LOGIN_REQUIRED = supportLoginRequired(COMPANIES[1]);
 
 /** finet-clientes rejected the session: expired, or another customer's. */
-export const SUPPORT_SESSION_INVALID =
-  'No pude confirmar tu sesión en el sitio de Finet: puede que haya expirado ' +
-  'o que corresponda a otro RUT. Vuelve a iniciar sesión y cuéntame de nuevo ' +
-  'la falla. Si prefieres, puedo derivarte con una persona de nuestro equipo.';
+export function supportSessionInvalid(company: Company): string {
+  return (
+    `No pude confirmar tu sesión en el sitio de ${company.name}: puede que haya expirado ` +
+    'o que corresponda a otro RUT. Vuelve a iniciar sesión y cuéntame de nuevo ' +
+    'la falla. Si prefieres, puedo derivarte con una persona de nuestro equipo.'
+  );
+}
+export const SUPPORT_SESSION_INVALID = supportSessionInvalid(COMPANIES[1]);
 
 /**
  * CU-66, exception 1: the support section did not answer. The conversation is

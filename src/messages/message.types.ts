@@ -1,3 +1,4 @@
+import type { CompanyId } from '../knowledge/companies.js';
 import {
   ChatwootContentType,
   ChatwootOutgoingMessage,
@@ -23,6 +24,8 @@ export interface WebMessage {
   content: string;
   accessToken?: string;
   clientIp?: string;
+  /** The company whose site the visitor is on. */
+  companyId?: CompanyId;
 }
 
 /**

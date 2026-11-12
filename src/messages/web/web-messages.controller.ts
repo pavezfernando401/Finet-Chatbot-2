@@ -22,6 +22,7 @@ export class WebMessagesController {
       content: dto.content,
       accessToken: dto.accessToken,
       clientIp: dto.clientIp,
+      companyId: dto.companyId,
     });
   }
 }

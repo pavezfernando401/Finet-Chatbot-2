@@ -1,3 +1,5 @@
+import type { CompanyId } from '../knowledge/companies.js';
+
 /**
  * A Finet customer as the bot knows them once their RUT checks out. Only
  * what personalised answers need: this travels to the engine, so nothing
@@ -5,6 +7,8 @@
  */
 export interface Customer {
   name: string;
+  /** Their company, when finet-clientes says it: the bot speaks as it. */
+  companyId?: CompanyId;
   /** `null` without the portal session of this same customer. */
   plans: CustomerPlan[] | null;
 }

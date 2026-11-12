@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { optionalSetting } from '../config/env.js';
+import type { CompanyId } from './companies.js';
 
 /** One plan of Finet's public catalog, as the site's plans page shows it. */
 export interface CatalogPlan {
@@ -46,8 +47,15 @@ const STALE_MS = 24 * 60 * 60_000;
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
   private readonly baseUrl?: string;
-  private cached?: { plans: CatalogPlan[]; at: number };
-  private refreshing?: Promise<CatalogPlan[] | null>;
+  /** One cache per company (`all` without a filter). */
+  private readonly cached = new Map<
+    CompanyId | 'all',
+    { plans: CatalogPlan[]; at: number }
+  >();
+  private readonly refreshing = new Map<
+    CompanyId | 'all',
+    Promise<CatalogPlan[] | null>
+  >();
 
   constructor(config: ConfigService) {
     this.baseUrl = optionalSetting(config, 'CLIENTES_API_URL')?.replace(
@@ -61,23 +69,34 @@ export class CatalogService {
    * quote: finet-clientes is not configured, or it has not answered for a
    * day. Never throws.
    */
-  plans(): Promise<CatalogPlan[] | null> {
-    const age = this.cached ? Date.now() - this.cached.at : Infinity;
-    if (this.cached && age < FRESH_MS) {
-      return Promise.resolve(this.cached.plans);
+  plans(companyId?: CompanyId): Promise<CatalogPlan[] | null> {
+    const key = companyId ?? 'all';
+    const cached = this.cached.get(key);
+    const age = cached ? Date.now() - cached.at : Infinity;
+    if (cached && age < FRESH_MS) {
+      return Promise.resolve(cached.plans);
     }
     if (!this.baseUrl) return Promise.resolve(null);
 
     // Conversations arriving together share one request.
-    this.refreshing ??= this.refresh(age).finally(() => {
-      this.refreshing = undefined;
-    });
-    return this.refreshing;
+    let refreshing = this.refreshing.get(key);
+    if (!refreshing) {
+      refreshing = this.refresh(key, age).finally(() => {
+        this.refreshing.delete(key);
+      });
+      this.refreshing.set(key, refreshing);
+    }
+    return refreshing;
   }
 
-  private async refresh(age: number): Promise<CatalogPlan[] | null> {
+  private async refresh(
+    key: CompanyId | 'all',
+    age: number,
+  ): Promise<CatalogPlan[] | null> {
+    // Each company's site quotes only its own plans.
+    const filter = key === 'all' ? '' : `?id_empresa=${key}`;
     try {
-      const res = await fetch(`${this.baseUrl}/landing/planes`, {
+      const res = await fetch(`${this.baseUrl}/landing/planes${filter}`, {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       if (!res.ok) {
@@ -89,11 +108,11 @@ export class CatalogService {
         throw new Error('finet-clientes sent a catalog that is not a list');
       }
       const plans = (body as PlanResponse[]).flatMap(toPlan);
-      this.cached = { plans, at: Date.now() };
+      this.cached.set(key, { plans, at: Date.now() });
       return plans;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      const stale = age < STALE_MS ? this.cached?.plans : undefined;
+      const stale = age < STALE_MS ? this.cached.get(key)?.plans : undefined;
       this.logger.warn(
         `Catalog refresh failed: ${reason}; ${stale ? 'keeping the last one' : 'no catalog'}`,
       );

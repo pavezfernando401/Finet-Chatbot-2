@@ -71,6 +71,19 @@ describe("CustomersService", () => {
     expect(JSON.parse(init.body as string)).toEqual({ rut: "123456785" });
   });
 
+  it("says which company the customer belongs to", async () => {
+    fetchMock.mockResolvedValue(
+      respond(200, {
+        encontrado: true,
+        cliente: { nombre_completo: "Ana", id_empresa: 2, planes: null },
+      }),
+    );
+
+    const lookup = await configured().lookup("123456785");
+
+    expect(lookup).toMatchObject({ customer: { companyId: 2 } });
+  });
+
   it("sends the portal session when there is one", async () => {
     fetchMock.mockResolvedValue(
       respond(200, { encontrado: false, cliente: null }),

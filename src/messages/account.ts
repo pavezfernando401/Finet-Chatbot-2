@@ -17,7 +17,7 @@ export const accountTool: ChatCompletionFunctionTool = {
   function: {
     name: ACCOUNT_TOOL,
     description:
-      'Consulta en los registros de Finet el saldo pendiente del cliente y el ' +
+      'Consulta en los registros de la empresa el saldo pendiente del cliente y el ' +
       'estado de sus facturas. Úsala cada vez que pregunte cuánto debe, por su ' +
       'saldo, sus facturas, sus pagos o sus vencimientos.',
     parameters: { type: 'object', properties: {} },
@@ -62,7 +62,7 @@ function describeInvoice(invoice: Invoice): string {
  */
 export function accountContext(account: Account): string {
   return [
-    'Acabas de consultar la cuenta del cliente en los registros de Finet.',
+    'Acabas de consultar la cuenta del cliente en los registros de la empresa.',
     `Saldo pendiente: ${clp.format(account.balance)}`,
     account.invoices.length
       ? ['Facturas pendientes:', ...account.invoices.map(describeInvoice)].join(

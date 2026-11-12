@@ -20,7 +20,7 @@ import {
   requireSetting,
 } from '../config/env.js';
 import { CatalogService } from '../knowledge/catalog.service.js';
-import { finetContext } from '../knowledge/finet.texts.js';
+import { companyContext } from '../knowledge/finet.texts.js';
 import type { SupportCategory } from '../customers/customer.types.js';
 import { CustomersService } from '../customers/customers.service.js';
 import { extractRut } from '../customers/rut.js';
@@ -51,7 +51,7 @@ import {
   RUT_LIMIT_REACHED,
   RUT_NOT_VERIFIED,
   RUT_PLACEHOLDER,
-  RUT_REQUEST,
+  rutRequest,
 } from './identity.texts.js';
 import {
   IncomingMessage,
@@ -67,14 +67,20 @@ import {
   MAX_DESCRIPTION,
   SUPPORT_CATEGORIES_TOOL,
   SUPPORT_DESCRIPTION_MISSING,
-  SUPPORT_LOGIN_REQUIRED,
-  SUPPORT_SESSION_INVALID,
+  supportLoginRequired,
+  supportSessionInvalid,
   supportCategoriesContext,
   supportCategoriesTool,
   supportConfirmation,
   supportUnavailableText,
   unknownCategoryText,
 } from './support.js';
+import {
+  COMPANIES,
+  companyOf,
+  type Company,
+  type CompanyId,
+} from '../knowledge/companies.js';
 
 /** What one turn produces: the reply, and the conversation to store. */
 interface Outcome {
@@ -106,11 +112,8 @@ export class MessagesService {
 
   private readonly rutAttempts = new RutAttempts();
 
-  private readonly handoffReply: string;
-  private readonly accountUnavailableReply: string;
-  private readonly engineDownReply: string;
-  private readonly supportUnavailableReply: string;
-  private readonly ticketFailedReply: string;
+  /** What changes with the company: who answers, its site and WhatsApp. */
+  private readonly companyTurns: Record<CompanyId, CompanyTurn>;
 
   /**
    * CU-65's defined wait: the engine's whole part of a turn — retries and
@@ -119,10 +122,6 @@ export class MessagesService {
    */
   private readonly replyTimeoutMs: number;
 
-  private readonly whatsapp: string;
-  /** The public site, which the engine points customers to. */
-  private readonly site: string;
-
   constructor(
     private readonly chat: ChatService,
     private readonly conversations: ConversationStore,
@@ -130,16 +129,17 @@ export class MessagesService {
     private readonly catalog: CatalogService,
     config: ConfigService,
   ) {
+    // Finet's WhatsApp is configured; Cable Mágico's is the one it published.
     const whatsapp = requireSetting(config, 'WHATSAPP_NUMBER');
-    this.whatsapp = whatsapp;
-    this.site = (
+    // The public site, which the engine points customers to; Cable Mágico's
+    // lives under its path.
+    const site = (
       optionalSetting(config, 'SITE_URL') ?? 'https://finet.cl'
     ).replace(/\/+$/, '');
-    this.handoffReply = handoffText(whatsapp);
-    this.accountUnavailableReply = accountUnavailableText(whatsapp);
-    this.engineDownReply = engineDownText(whatsapp);
-    this.supportUnavailableReply = supportUnavailableText(whatsapp);
-    this.ticketFailedReply = ticketFailedText(whatsapp);
+    this.companyTurns = {
+      1: companyTurn(COMPANIES[1], site, whatsapp),
+      2: companyTurn(COMPANIES[2], site, whatsapp),
+    };
     this.replyTimeoutMs = numberSetting(config, 'REPLY_TIMEOUT_MS', 45_000);
   }
 
@@ -177,6 +177,7 @@ export class MessagesService {
       message.content,
       message.accessToken,
       message.clientIp,
+      message.companyId,
     );
 
     return answer ?? { content: null, handedOff: true };
@@ -188,9 +189,13 @@ export class MessagesService {
     content: string,
     accessToken?: string,
     clientIp?: string,
+    companyId?: CompanyId,
   ): Promise<Answer> {
     return this.serialise(key, async () => {
-      const conversation = this.conversations.get(key);
+      const stored = this.conversations.get(key);
+      // The site the visitor writes from; a channel without one keeps what
+      // the conversation had (Finet by default).
+      const conversation = companyId ? { ...stored, companyId } : stored;
 
       // Handed off: the customer was sent to a person, so the message gets
       // no answer and is not kept — not in the history, not in the log.
@@ -239,7 +244,8 @@ export class MessagesService {
     const found = extractRut(content);
 
     if (identity.status === 'new' && !found) {
-      return this.say(conversation, content, RUT_REQUEST, {
+      const { company } = this.turnFor(conversation, identity);
+      return this.say(conversation, content, rutRequest(company), {
         status: 'awaiting_rut',
       });
     }
@@ -314,10 +320,15 @@ export class MessagesService {
   ): Promise<Outcome> {
     const turn: ChatCompletionMessageParam = { role: 'user', content };
     const history = [...conversation.turns, turn];
+    // The customer's own company once identified, else the site's.
+    const company = this.turnFor(conversation, identity);
     const customerContext =
       identity.status === 'identified'
-        ? identifiedContext(identity.customer)
-        : anonymousContext({ justFailed: notice !== undefined });
+        ? identifiedContext(identity.customer, company.company)
+        : anonymousContext({
+            justFailed: notice !== undefined,
+            company: company.company,
+          });
 
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), this.replyTimeoutMs);
@@ -325,10 +336,11 @@ export class MessagesService {
     try {
       // Read inside the turn's deadline, so the reply still fits in what
       // the site waits. Cached, so usually instant; never throws.
-      const context = `${finetContext({
-        plans: await this.catalog.plans(),
-        site: this.site,
-        whatsapp: this.whatsapp,
+      const context = `${companyContext({
+        company: company.company,
+        plans: await this.catalog.plans(company.company.id),
+        site: company.site,
+        whatsapp: company.whatsapp,
       })}\n\n${customerContext}`;
       generated = await this.generate(
         key,
@@ -336,13 +348,14 @@ export class MessagesService {
         context,
         identity,
         deadline.signal,
+        company,
         accessToken,
       );
     } catch (error) {
       if (!(error instanceof ServiceUnavailableException)) throw error;
       this.logger.warn(`${key} · engine gave no answer, handed off`);
       generated = {
-        text: this.engineDownReply,
+        text: company.replies.engineDown,
         handedOff: true,
         escalation: { reason: ENGINE_DOWN_REASON, lead: ENGINE_DOWN_LEAD },
       };
@@ -360,6 +373,7 @@ export class MessagesService {
           identity.rut,
           history,
           generated.escalation,
+          company,
         ),
         handedOff: true,
       };
@@ -377,6 +391,7 @@ export class MessagesService {
         turns: [...history, { role: 'assistant', content: reply }],
         identity,
         handedOff,
+        companyId: conversation.companyId,
       },
     };
   }
@@ -388,6 +403,7 @@ export class MessagesService {
     context: string,
     identity: Identity,
     signal: AbortSignal,
+    company: CompanyTurn,
     accessToken?: string,
   ): Promise<Generated> {
     const completion = await this.chat.complete(
@@ -401,7 +417,7 @@ export class MessagesService {
       return { text: completion.content, handedOff: false };
     }
     if (completion.name === HANDOFF_TOOL) {
-      return this.handOff(completion.arguments);
+      return this.handOff(completion.arguments, company);
     }
     // The support tools are only offered to an identified customer.
     if (identity.status === 'identified') {
@@ -412,6 +428,7 @@ export class MessagesService {
           context,
           identity.rut,
           signal,
+          company,
           accessToken,
         );
       }
@@ -422,8 +439,9 @@ export class MessagesService {
               completion.arguments,
               { rut: identity.rut, accessToken },
               signal,
+              company,
             )
-          : { text: SUPPORT_LOGIN_REQUIRED, handedOff: false };
+          : { text: supportLoginRequired(company.company), handedOff: false };
       }
     }
     return {
@@ -433,6 +451,7 @@ export class MessagesService {
         context,
         identity,
         signal,
+        company,
       ),
       handedOff: false,
     };
@@ -453,9 +472,12 @@ export class MessagesService {
   }
 
   /** The engine asked for a person. The text is replaced if a ticket is filed. */
-  private handOff(args: Record<string, unknown>): Generated {
+  private handOff(
+    args: Record<string, unknown>,
+    company: CompanyTurn,
+  ): Generated {
     return {
-      text: this.handoffReply,
+      text: company.replies.handoff,
       handedOff: true,
       escalation: { reason: handoffReason(args) },
     };
@@ -472,6 +494,7 @@ export class MessagesService {
     rut: string,
     history: ChatCompletionMessageParam[],
     escalation: NonNullable<Generated['escalation']>,
+    company: CompanyTurn,
   ): Promise<string> {
     const ticket = await this.customers.escalate({
       rut,
@@ -494,7 +517,7 @@ export class MessagesService {
 
     const text = ticket
       ? ticketFiledText(ticket.codigo_seguimiento)
-      : this.ticketFailedReply;
+      : company.replies.ticketFailed;
     return escalation.lead ? `${escalation.lead} ${text}` : text;
   }
 
@@ -509,20 +532,21 @@ export class MessagesService {
     context: string,
     rut: string,
     signal: AbortSignal,
+    company: CompanyTurn,
     accessToken?: string,
   ): Promise<Generated> {
     // Checked before the categories: without a session the request could
     // not be filed at the end, and the customer would describe it for nothing.
     if (!accessToken) {
       this.logger.log(`${key} · failure report: no portal session`);
-      return { text: SUPPORT_LOGIN_REQUIRED, handedOff: false };
+      return { text: supportLoginRequired(company.company), handedOff: false };
     }
 
     const categories = await this.customers.supportCategories(signal);
     this.logger.log(
       `${key} · support categories: ${categories ? 'found' : 'unavailable'}`,
     );
-    if (!categories) return this.supportUnavailable();
+    if (!categories) return this.supportUnavailable(company);
 
     const completion = await this.chat.complete(
       history,
@@ -534,13 +558,14 @@ export class MessagesService {
       return { text: completion.content, handedOff: false };
     }
     if (completion.name === HANDOFF_TOOL) {
-      return this.handOff(completion.arguments);
+      return this.handOff(completion.arguments, company);
     }
     return this.fileSupportRequest(
       key,
       completion.arguments,
       { rut, accessToken },
       signal,
+      company,
       categories,
     );
   }
@@ -555,6 +580,7 @@ export class MessagesService {
     args: Record<string, unknown>,
     customer: { rut: string; accessToken: string },
     signal: AbortSignal,
+    company: CompanyTurn,
     categories?: SupportCategory[],
   ): Promise<Generated> {
     const description =
@@ -564,7 +590,7 @@ export class MessagesService {
     }
 
     const list = categories ?? (await this.customers.supportCategories(signal));
-    if (!list) return this.supportUnavailable();
+    if (!list) return this.supportUnavailable(company);
     const category = findCategory(list, args.categoria);
     if (!category) {
       return { text: unknownCategoryText(list), handedOff: false };
@@ -589,17 +615,17 @@ export class MessagesService {
       };
     }
     if (outcome.status === 'unauthorized') {
-      return { text: SUPPORT_SESSION_INVALID, handedOff: false };
+      return { text: supportSessionInvalid(company.company), handedOff: false };
     }
-    return this.supportUnavailable();
+    return this.supportUnavailable(company);
   }
 
   /**
    * CU-66, exception 1: the support section did not answer. The customer is
    * told a person will take the case, so the conversation is handed off.
    */
-  private supportUnavailable(): Generated {
-    return { text: this.supportUnavailableReply, handedOff: true };
+  private supportUnavailable(company: CompanyTurn): Generated {
+    return { text: company.replies.supportUnavailable, handedOff: true };
   }
 
   /**
@@ -612,13 +638,14 @@ export class MessagesService {
     context: string,
     identity: Identity,
     signal: AbortSignal,
+    company: CompanyTurn,
   ): Promise<string> {
     // The tool is only offered to an identified customer.
-    if (identity.status !== 'identified') return this.accountUnavailableReply;
+    if (identity.status !== 'identified') return company.replies.accountUnavailable;
 
     const lookup = await this.customers.account(identity.rut);
     this.logger.log(`${key} · account lookup: ${lookup.status}`);
-    if (lookup.status !== 'found') return this.accountUnavailableReply;
+    if (lookup.status !== 'found') return company.replies.accountUnavailable;
 
     // No tools this time, so the engine has to answer in words.
     const completion = await this.chat.complete(
@@ -629,7 +656,14 @@ export class MessagesService {
     );
     return completion.type === 'text'
       ? completion.content
-      : this.accountUnavailableReply;
+      : company.replies.accountUnavailable;
+  }
+
+  /** The customer's own company once identified, else the site's (Finet by default). */
+  private turnFor(conversation: Conversation, identity: Identity): CompanyTurn {
+    const own =
+      identity.status === 'identified' ? identity.customer.companyId : undefined;
+    return this.companyTurns[companyOf(own ?? conversation.companyId).id];
   }
 
   /** Replies with a fixed text, without the engine. */
@@ -649,6 +683,7 @@ export class MessagesService {
         ],
         identity,
         handedOff: false,
+        companyId: conversation.companyId,
       },
     };
   }
@@ -679,4 +714,38 @@ export class MessagesService {
 
     return result;
   }
+}
+
+/** What a turn needs from its company: who answers, its site and WhatsApp. */
+interface CompanyTurn {
+  company: Company;
+  site: string;
+  whatsapp: string;
+  replies: {
+    handoff: string;
+    accountUnavailable: string;
+    engineDown: string;
+    supportUnavailable: string;
+    ticketFailed: string;
+  };
+}
+
+function companyTurn(
+  company: Company,
+  site: string,
+  configuredWhatsapp: string,
+): CompanyTurn {
+  const whatsapp = company.whatsapp ?? configuredWhatsapp;
+  return {
+    company,
+    site: `${site}${company.sitePath}`,
+    whatsapp,
+    replies: {
+      handoff: handoffText(whatsapp),
+      accountUnavailable: accountUnavailableText(whatsapp),
+      engineDown: engineDownText(whatsapp),
+      supportUnavailable: supportUnavailableText(whatsapp),
+      ticketFailed: ticketFailedText(whatsapp),
+    },
+  };
 }
