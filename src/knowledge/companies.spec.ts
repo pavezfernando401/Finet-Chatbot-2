@@ -15,7 +15,7 @@ describe('companies', () => {
 
   it('each company has the office it gave', () => {
     expect(COMPANIES[2].office).toContain('Avenida Peñablanca 525, Algarrobo');
-    expect(COMPANIES[1].office).toContain('La Pintana');
+    expect(COMPANIES[1].office).toContain('Avenida Santa Rosa 12980, La Pintana');
   });
 
   it('an unknown or missing company is Finet', () => {

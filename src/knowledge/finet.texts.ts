@@ -107,8 +107,7 @@ export function companyContext(options: {
     `Información de ${company.name}. Úsala para las consultas generales y no ` +
       'inventes nada que no esté aquí.',
     ...facts,
-    `- Su oficina y atención presencial están ${company.office}. Si no ` +
-      'aparece la calle, di que no la tienes y sugiere el WhatsApp.',
+    `- Su oficina y atención presencial están ${company.office}.`,
     '- Ante problemas de conexión, primero recomienda reiniciar el router ' +
       '(desconectarlo 30 segundos y volver a conectarlo). Si sigue, soporte ' +
       'atiende por WhatsApp o con un ticket desde el Portal Cliente.',

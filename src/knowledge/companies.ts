@@ -36,7 +36,7 @@ export const COMPANIES: Record<CompanyId, Company> = {
     coverage: 'La Pintana, La Granja, La Florida y Puente Alto',
     sitePath: '',
     hours: null,
-    office: 'en La Pintana',
+    office: 'en Avenida Santa Rosa 12980, La Pintana',
     whatsapp: null,
   },
   2: {

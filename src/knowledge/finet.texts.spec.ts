@@ -71,7 +71,7 @@ describe('finetContext', () => {
   });
 
   it('gives the office, so where the company is gets answered, not handed off', () => {
-    expect(context(null)).toContain('La Pintana');
+    expect(context(null)).toContain('Avenida Santa Rosa 12980, La Pintana');
     const cable = companyContext({
       company: COMPANIES[2],
       plans: null,
