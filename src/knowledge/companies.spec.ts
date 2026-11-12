@@ -13,6 +13,11 @@ describe('companies', () => {
     expect(COMPANIES[1].sitePath).toBe('');
   });
 
+  it('each company has the office it gave', () => {
+    expect(COMPANIES[2].office).toContain('Avenida Peñablanca 525, Algarrobo');
+    expect(COMPANIES[1].office).toContain('La Pintana');
+  });
+
   it('an unknown or missing company is Finet', () => {
     expect(companyOf(2)).toBe(COMPANIES[2]);
     expect(companyOf(7)).toBe(COMPANIES[1]);

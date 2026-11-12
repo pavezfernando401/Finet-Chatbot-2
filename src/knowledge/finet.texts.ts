@@ -107,6 +107,8 @@ export function companyContext(options: {
     `Información de ${company.name}. Úsala para las consultas generales y no ` +
       'inventes nada que no esté aquí.',
     ...facts,
+    `- Su oficina y atención presencial están ${company.office}. Si no ` +
+      'aparece la calle, di que no la tienes y sugiere el WhatsApp.',
     '- Ante problemas de conexión, primero recomienda reiniciar el router ' +
       '(desconectarlo 30 segundos y volver a conectarlo). Si sigue, soporte ' +
       'atiende por WhatsApp o con un ticket desde el Portal Cliente.',
@@ -123,7 +125,8 @@ export function companyContext(options: {
     'Si te preguntan algo que no está en esta información (por ejemplo ' +
       'plazos de contrato, equipos, canales de TV o horarios), no lo ' +
       'supongas: dilo, sugiere la página que corresponda u ofrece derivar con ' +
-      'una persona del equipo.',
+      'una persona del equipo. Ofrecer no es derivar: no uses ' +
+      'derivar_a_persona hasta que el cliente diga que sí o pida una persona.',
   ].join('\n');
 }
 

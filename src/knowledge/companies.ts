@@ -21,6 +21,8 @@ export interface Company {
   sitePath: '' | '/cable-magico';
   /** Opening hours, if the company gave them. */
   hours: string | null;
+  /** Its office, as far as the company gave it: commune only, or street too. */
+  office: string;
   /** Its WhatsApp; `null` means the configured `WHATSAPP_NUMBER`. */
   whatsapp: string | null;
 }
@@ -34,6 +36,7 @@ export const COMPANIES: Record<CompanyId, Company> = {
     coverage: 'La Pintana, La Granja, La Florida y Puente Alto',
     sitePath: '',
     hours: null,
+    office: 'en La Pintana',
     whatsapp: null,
   },
   2: {
@@ -44,6 +47,7 @@ export const COMPANIES: Record<CompanyId, Company> = {
     coverage: 'Algarrobo y El Quisco',
     sitePath: '/cable-magico',
     hours: 'de 9:00 a 17:00',
+    office: 'en Avenida Peñablanca 525, Algarrobo',
     whatsapp: '+56 9 3303 1480',
   },
 };

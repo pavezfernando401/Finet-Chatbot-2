@@ -1,5 +1,6 @@
 import type { CatalogPlan } from './catalog.service.js';
-import { finetContext } from './finet.texts.js';
+import { COMPANIES } from './companies.js';
+import { companyContext, finetContext } from './finet.texts.js';
 
 const plan = (overrides: Partial<CatalogPlan> = {}): CatalogPlan => ({
   name: 'Fibra 600',
@@ -67,5 +68,20 @@ describe('finetContext', () => {
 
   it('gives the WhatsApp number', () => {
     expect(context(null)).toContain('+56 9 4500 2319');
+  });
+
+  it('gives the office, so where the company is gets answered, not handed off', () => {
+    expect(context(null)).toContain('La Pintana');
+    const cable = companyContext({
+      company: COMPANIES[2],
+      plans: null,
+      site: 'https://finet.cl/cable-magico',
+      whatsapp: '+56 9 3303 1480',
+    });
+    expect(cable).toContain('Avenida Peñablanca 525, Algarrobo');
+  });
+
+  it('offering a person is not handing off', () => {
+    expect(context(null)).toContain('no uses derivar_a_persona hasta que el cliente diga que sí');
   });
 });
